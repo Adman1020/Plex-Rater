@@ -5,15 +5,14 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "lint": "node --check server.js src/plex.js src/session.js public/app.js",
+    "lint": "node --check server.js src/plex.js public/app.js",
     "test": "echo \"No tests yet\""
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "express": "^5.1.0",
-    "cookie-session": "^2.1.0"
+    "express": "^5.1.0"
   },
   "license": "MIT",
   "private": true
