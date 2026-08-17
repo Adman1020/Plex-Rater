@@ -1,94 +1,115 @@
 const express = require("express");
-const cookieSession = require("cookie-session");
+const crypto = require("crypto");
 const path = require("path");
 const plex = require("./src/plex");
-const { getClientId, getBaseUrl, getSessionSecret } = require("./src/session");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const CLIENT_ID = process.env.PLEX_CLIENT_IDENTIFIER || "plex-rater-" + crypto.randomUUID();
+const COOKIE_SECRET = process.env.COOKIE_SECRET || "plex-rater-" + crypto.randomUUID();
 
 app.use(express.json());
-app.use(cookieSession({
-  name: "plex_rater_session",
-  keys: [getSessionSecret()],
-  maxAge: 30 * 24 * 60 * 60 * 1000,
-  sameSite: "lax",
-  httpOnly: true,
-}));
+app.use(express.static(path.join(__dirname, "public"), { maxAge: 0 }));
 
-app.use(express.static(path.join(__dirname, "public")));
+// Simple signed-cookie session using a single cookie
+function getSession(req) {
+  const raw = req.cookies?.pr_session;
+  if (!raw) return {};
+  try {
+    const [payload, sig] = raw.split(".");
+    const expected = crypto.createHmac("sha256", COOKIE_SECRET).update(payload).digest("base64url");
+    if (sig !== expected) return {};
+    return JSON.parse(Buffer.from(payload, "base64url").toString());
+  } catch { return {}; }
+}
+
+function setSession(res, data) {
+  const payload = Buffer.from(JSON.stringify(data)).toString("base64url");
+  const sig = crypto.createHmac("sha256", COOKIE_SECRET).update(payload).digest("base64url");
+  res.cookie("pr_session", payload + "." + sig, {
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    path: "/",
+  });
+}
+
+// Parse cookies manually since we're not using cookie-parser
+app.use((req, _res, next) => {
+  req.cookies = {};
+  const header = req.headers.cookie || "";
+  for (const pair of header.split(";")) {
+    const [k, ...v] = pair.trim().split("=");
+    if (k) req.cookies[k] = v.join("=");
+  }
+  next();
+});
 
 function requireAuth(req, res, next) {
-  if (!req.session || !req.session.authToken) {
-    return res.status(401).json({ error: "Not authenticated" });
-  }
+  const session = getSession(req);
+  if (!session.authToken) return res.status(401).json({ error: "Not authenticated" });
+  req.session = session;
   next();
 }
 
-app.get("/api/login", async (req, res) => {
+// Step 1: Create PIN, return auth URL
+app.get("/api/login", async (_req, res) => {
   try {
-    const clientId = getClientId();
-    const baseUrl = getBaseUrl(req);
-    const forwardUrl = `${baseUrl}/api/login/callback`;
-    const pin = await plex.createPin(clientId, forwardUrl);
-    req.session.pendingPin = { id: pin.id, clientId };
-    const authUrl = `https://app.plex.tv/auth#?clientID=${encodeURIComponent(clientId)}&code=${encodeURIComponent(pin.code)}&context[product]=${encodeURIComponent(plex.PRODUCT)}`;
-    res.json({ url: authUrl });
+    const pin = await plex.createPin(CLIENT_ID);
+    const url = plex.authUrl(CLIENT_ID, pin.code);
+    setSession(res, { pinId: pin.id });
+    res.json({ url });
   } catch (err) {
-    console.error("Login error:", err.message);
-    res.status(500).json({ error: "Failed to create Plex login request" });
+    console.error("Login create PIN error:", err.message);
+    res.status(500).json({ error: "Failed to start login" });
   }
 });
 
-app.get("/api/login/callback", async (req, res) => {
+// Step 2: User comes back, clicks button → one atomic request does everything
+app.get("/api/auth/complete", async (req, res) => {
   try {
-    const { pendingPin } = req.session || {};
-    if (!pendingPin) return res.redirect("/?error=no_pin");
-    const token = await plex.checkPin(pendingPin.clientId, pendingPin.id);
-    if (!token) return res.redirect("/?error=no_token");
-    req.session.authToken = token;
-    req.session.clientId = pendingPin.clientId;
-    delete req.session.pendingPin;
-    res.redirect("/");
+    const session = getSession(req);
+    if (!session.pinId) return res.json({ ok: false, error: "No pending login" });
+
+    // Get auth token from Plex
+    const authToken = await plex.getAuthToken(CLIENT_ID, session.pinId);
+    if (!authToken) return res.json({ ok: false, error: "Not yet authenticated on Plex" });
+
+    // Get servers
+    const resources = await plex.getResources(authToken, CLIENT_ID);
+    if (resources.length === 0) {
+      return res.json({ ok: false, error: "No servers found" });
+    }
+
+    // Auto-select first server, find working connection
+    const server = resources[0];
+    let serverUri;
+    try {
+      serverUri = await plex.findWorkingConnection(server.connections || [], authToken);
+    } catch {
+      return res.json({ ok: false, error: "Could not connect to server" });
+    }
+
+    // Save everything to session
+    setSession(res, {
+      authToken,
+      serverName: server.name,
+      machineIdentifier: server.machineIdentifier,
+      serverUri,
+    });
+
+    res.json({ ok: true, serverName: server.name });
   } catch (err) {
-    console.error("Callback error:", err.message);
-    res.redirect("/?error=auth_failed");
+    console.error("Auth complete error:", err.message);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-app.get("/api/servers", requireAuth, async (req, res) => {
-  try {
-    const servers = await plex.getResources(req.session.authToken, req.session.clientId);
-    res.json({ servers });
-  } catch (err) {
-    console.error("Servers error:", err.message);
-    res.status(500).json({ error: "Failed to fetch servers" });
-  }
-});
-
-app.post("/api/server", requireAuth, async (req, res) => {
-  try {
-    const { machineIdentifier } = req.body;
-    if (!machineIdentifier) return res.status(400).json({ error: "Missing machineIdentifier" });
-    const servers = await plex.getResources(req.session.authToken, req.session.clientId);
-    const server = servers.find((s) => s.machineIdentifier === machineIdentifier);
-    if (!server) return res.status(404).json({ error: "Server not found" });
-    if (!server.connections.length) return res.status(404).json({ error: "No connections for server" });
-    const serverUri = await plex.findWorkingConnection(server.connections, req.session.authToken);
-    req.session.server = { name: server.name, machineIdentifier, serverUri };
-    res.json({ ok: true, name: server.name });
-  } catch (err) {
-    console.error("Server select error:", err.message);
-    res.status(500).json({ error: "Failed to connect to server" });
-  }
-});
-
+// Get unrated movies
 app.get("/api/queue", requireAuth, async (req, res) => {
   try {
-    const { server } = req.session;
-    if (!server || !server.serverUri) return res.status(400).json({ error: "No server selected" });
-    const sections = await plex.getMovieSections(server.serverUri, req.session.authToken);
-    const movies = await plex.getUnratedMovies(server.serverUri, req.session.authToken, sections);
+    const sections = await plex.getMovieSections(req.session.serverUri, req.session.authToken);
+    const movies = await plex.getUnratedMovies(req.session.serverUri, req.session.authToken, sections);
     res.json({ movies, count: movies.length });
   } catch (err) {
     console.error("Queue error:", err.message);
@@ -96,15 +117,12 @@ app.get("/api/queue", requireAuth, async (req, res) => {
   }
 });
 
+// Rate a movie
 app.post("/api/rate", requireAuth, async (req, res) => {
   try {
-    const { server } = req.session;
-    if (!server || !server.serverUri) return res.status(400).json({ error: "No server selected" });
     const { ratingKey, rating } = req.body;
-    if (!ratingKey || typeof rating !== "number") {
-      return res.status(400).json({ error: "Missing ratingKey or rating" });
-    }
-    await plex.rateMovie(server.serverUri, req.session.authToken, ratingKey, rating);
+    if (!ratingKey || typeof rating !== "number") return res.status(400).json({ error: "Invalid params" });
+    await plex.rateMovie(req.session.serverUri, req.session.authToken, ratingKey, rating);
     res.json({ ok: true });
   } catch (err) {
     console.error("Rate error:", err.message);
@@ -112,39 +130,40 @@ app.post("/api/rate", requireAuth, async (req, res) => {
   }
 });
 
+// Proxy poster images
 app.get("/api/thumb", requireAuth, async (req, res) => {
   try {
-    const { server } = req.session;
-    if (!server || !server.serverUri) return res.status(400).end();
     const { key } = req.query;
     if (!key) return res.status(400).end();
-    const thumbPath = `/library/metadata/${key}/thumb`;
-    const upstream = await plex.getThumbStream(server.serverUri, req.session.authToken, thumbPath);
+    const upstream = await plex.getThumbStream(req.session.serverUri, req.session.authToken, `/library/metadata/${key}/thumb`);
     res.set("Content-Type", upstream.headers.get("content-type") || "image/jpeg");
     res.set("Cache-Control", "public, max-age=86400");
     const buffer = Buffer.from(await upstream.arrayBuffer());
     res.send(buffer);
-  } catch (err) {
-    console.error("Thumb error:", err.message);
-    res.status(404).end();
+  } catch { res.status(404).end(); }
+});
+
+// Status check
+app.get("/api/status", (req, res) => {
+  const session = getSession(req);
+  if (session.authToken && session.serverUri) {
+    res.json({ loggedIn: true, serverName: session.serverName });
+  } else {
+    res.json({ loggedIn: false });
   }
 });
 
-app.post("/api/logout", (req, res) => {
-  req.session = null;
+// Logout
+app.post("/api/logout", (_req, res) => {
+  setSession(res, {});
   res.json({ ok: true });
 });
 
-app.get("/api/status", (req, res) => {
-  const loggedIn = !!(req.session && req.session.authToken);
-  const server = req.session?.server || null;
-  res.json({ loggedIn, server });
-});
-
-app.get("*", (req, res) => {
+// Serve app
+app.get("/{*path}", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 app.listen(PORT, () => {
-  console.log(`Plex-Rater running on port ${PORT}`);
+  console.log(`Plex-Rater on port ${PORT} (client: ${CLIENT_ID})`);
 });

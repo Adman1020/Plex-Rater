@@ -15,16 +15,18 @@
         <div class="logo">PR</div>
         <h1>Plex-Rater</h1>
         <p>Rate the films you've watched.<br>One at a time.</p>
-        <button id="btn-login" class="btn btn-primary">Connect with Plex</button>
+        <div id="login-step1">
+          <button id="btn-connect" class="btn btn-primary">Connect with Plex</button>
+        </div>
+        <div id="login-step2" class="hidden">
+          <a id="plex-link" class="btn btn-primary" href="#" target="_blank" rel="noopener">Open Plex Login</a>
+          <button id="btn-complete" class="btn btn-primary" style="margin-top:12px;background:#333;color:#fff">I've Logged In</button>
+        </div>
+        <div id="login-step3" class="hidden">
+          <div class="spinner"></div>
+          <p class="login-instruction">Connecting to your server…</p>
+        </div>
         <div id="login-error" class="error hidden"></div>
-      </div>
-    </div>
-
-    <div id="screen-servers" class="screen">
-      <div class="login-card">
-        <h1>Choose a Server</h1>
-        <div id="server-list" class="server-list"></div>
-        <button id="btn-logout-servers" class="btn btn-ghost">Log out</button>
       </div>
     </div>
 
@@ -34,15 +36,13 @@
         <div id="server-name"></div>
         <button id="btn-logout" class="btn btn-sm btn-ghost">Logout</button>
       </header>
-
       <div id="card-area">
         <div id="empty-state" class="hidden">
           <div class="empty-icon">✓</div>
           <h2>All caught up!</h2>
           <p>You've rated every watched film.</p>
-          <button id="btn-reload" class="btn btn-primary">Refresh</button>
+          <button id="btn-reload" class="btn btn-primary" style="width:auto;display:inline-block">Refresh</button>
         </div>
-
         <div id="card" class="card">
           <div id="poster-wrap" class="poster-wrap">
             <img id="poster" class="poster" alt="">
@@ -50,7 +50,6 @@
           </div>
           <div class="card-info">
             <div class="card-title" id="card-title"></div>
-            <div class="card-meta" id="card-meta"></div>
             <div class="card-synopsis" id="card-synopsis"></div>
             <div class="card-date" id="card-date"></div>
             <div class="stars" id="stars"></div>
@@ -63,11 +62,10 @@
       </div>
     </div>
 
-    <div id="screen-loading" class="screen active">
+    <div id="screen-loading" class="screen">
       <div class="spinner"></div>
     </div>
   </div>
-
   <script src="/app.js"></script>
 </body>
 </html>
