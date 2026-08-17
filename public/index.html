@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>Plex-Rater</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <div id="screen-login" class="screen active">
+      <div class="login-card">
+        <div class="logo">PR</div>
+        <h1>Plex-Rater</h1>
+        <p>Rate the films you've watched.<br>One at a time.</p>
+        <button id="btn-login" class="btn btn-primary">Connect with Plex</button>
+        <div id="login-error" class="error hidden"></div>
+      </div>
+    </div>
+
+    <div id="screen-servers" class="screen">
+      <div class="login-card">
+        <h1>Choose a Server</h1>
+        <div id="server-list" class="server-list"></div>
+        <button id="btn-logout-servers" class="btn btn-ghost">Log out</button>
+      </div>
+    </div>
+
+    <div id="screen-rating" class="screen">
+      <header id="topbar">
+        <div id="count-badge"><span id="count-num">0</span> unrated</div>
+        <div id="server-name"></div>
+        <button id="btn-logout" class="btn btn-sm btn-ghost">Logout</button>
+      </header>
+
+      <div id="card-area">
+        <div id="empty-state" class="hidden">
+          <div class="empty-icon">✓</div>
+          <h2>All caught up!</h2>
+          <p>You've rated every watched film.</p>
+          <button id="btn-reload" class="btn btn-primary">Refresh</button>
+        </div>
+
+        <div id="card" class="card">
+          <div id="poster-wrap" class="poster-wrap">
+            <img id="poster" class="poster" alt="">
+            <div id="poster-placeholder" class="poster-placeholder">No Poster</div>
+          </div>
+          <div class="card-info">
+            <div class="card-title" id="card-title"></div>
+            <div class="card-meta" id="card-meta"></div>
+            <div class="card-synopsis" id="card-synopsis"></div>
+            <div class="card-date" id="card-date"></div>
+            <div class="stars" id="stars"></div>
+          </div>
+          <div class="card-actions">
+            <button id="btn-skip" class="btn btn-ghost">Skip</button>
+            <button id="btn-save" class="btn btn-primary" disabled>Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="screen-loading" class="screen active">
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

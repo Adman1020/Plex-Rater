@@ -1,0 +1,20 @@
+{
+  "name": "plex-rater",
+  "version": "1.0.0",
+  "description": "Rate your watched Plex movies with a simple card-stack UI",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "lint": "node --check server.js src/plex.js src/session.js public/app.js",
+    "test": "echo \"No tests yet\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "cookie-session": "^2.1.0"
+  },
+  "license": "MIT",
+  "private": true
+}
