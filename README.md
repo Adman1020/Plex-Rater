@@ -1,35 +1,55 @@
 # Plex-Rater
 
-A dead-simple, mobile-first web app for rating your watched Plex movies. One film on screen at a time, swipe or tap to rate, and the rating is saved straight back to Plex.
+> **Vibe coded app.** This was built with AI assistance and hasn't been battle-tested. It works, but expect rough edges.
+
+A dead-simple, mobile-first web app for rating your watched Plex movies. One film on screen at a time, swipe or tap to rate, and the rating is saved straight back to Plex. Run it, use it, close it.
 
 ## Features
 
 - Plex PIN login (no passwords handled by the app)
-- Multiple Plex server support
 - Card-stack UI with touch swipe + tap-to-rate
 - 10-point star rating (half-star increments = Plex's 5-star scale)
-- Unrated movie count
 - Poster art proxied through the backend (token never hits the browser)
+- Deduplicates across multiple movie library sections
+
+## Quick Start (Docker)
+
+```sh
+docker build -t plex-rater .
+docker run -d -p 3000:3000 --name plex-rater plex-rater
+```
+
+Open `http://localhost:3000` on your phone or desktop.
+
+### Docker Compose
+
+```yaml
+services:
+  plex-rater:
+    build: .
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+```
+
+```sh
+docker compose up -d
+```
+
+## Run Without Docker
+
+```sh
+npm install
+npm start
+```
 
 ## Environment Variables
+
+All optional — everything works out of the box with sensible defaults.
 
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `3000` | HTTP listen port |
-| `COOKIE_SECRET` | random | Signed session cookie secret — set a stable value in production |
-| `PLEX_CLIENT_IDENTIFIER` | random per start | Persistent client identifier sent to Plex API |
-| `BASE_URL` | auto-detected | Public URL (set behind Cloudflare tunnel, e.g. `https://rater.example.com`) |
-
-## Deploy with Coolify
-
-1. Push this repo to a GitHub repo (private recommended).
-2. In Coolify, add a new Application → Dockerfile, point at this repo.
-3. Set `PORT=3000`, `COOKIE_SECRET`, and `BASE_URL` in the environment.
-4. Expose port 3000.
-
-## Cloudflare Tunnel
-
-Place a Cloudflare Tunnel in front for zero-trust email OTP access. The app itself only uses Plex login — no Cloudflare auth tokens are needed.
 
 ## Development
 
@@ -39,4 +59,6 @@ npm install
 npm start
 ```
 
-Open `http://localhost:3000` on your phone or desktop.
+## License
+
+MIT
